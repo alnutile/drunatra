@@ -1,6 +1,6 @@
 {
   "name": "alnutile/drunatra",
-  "description": "Playing around with the idea of a drupal micro framework"
+  "description": "Playing around with the idea of a drupal micro framework",
   "type": "drupal-core",
   "license": "GPL-2.0+",
   "require": {
