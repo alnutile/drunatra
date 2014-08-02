@@ -1,0 +1,24 @@
+{
+  "name": "drupal/drupal",
+  "description": "Drupal is an open source content management platform powering millions of websites and applications.",
+  "type": "drupal-core",
+  "license": "GPL-2.0+",
+  "require": {
+    "php": ">=5.4.2",
+  },
+  "autoload": {
+    "psr-4": {
+      "Drupal\\Core\\": "core/lib/Drupal/Core",
+      "Drupal\\Component\\": "core/lib/Drupal/Component",
+      "Drupal\\Driver\\": "drivers/lib/Drupal/Driver"
+    },
+    "files": [
+      "core/lib/Drupal.php"
+    ]
+  },
+  "config": {
+    "vendor-dir": "core/vendor",
+    "preferred-install": "dist",
+    "autoloader-suffix": "Drupal8"
+  }
+}

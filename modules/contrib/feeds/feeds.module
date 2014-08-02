@@ -1,0 +1,485 @@
+<?php
+
+/**
+ * @file
+ * Feeds - basic API functions and hook implementations.
+ */
+
+use Drupal\Core\Datetime\DrupalDateTime;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\feeds\FeedInterface;
+use Drupal\feeds\Entity\Importer;
+use Drupal\feeds\StateInterface;
+use Guzzle\Http\Exception\RequestException;
+use Guzzle\Http\Exception\BadResponseException;
+use Zend\Feed\Reader\Reader;
+
+/**
+ * Implements hook_help().
+ */
+function feeds_help($path, $arg) {
+  switch ($path) {
+    case 'admin/structure/feeds':
+      return '<p>' . t('Create one or more Feed importers for pulling content into Drupal.') . '</p>';
+  }
+}
+
+/**
+ * Implements hook_hook_info().
+ */
+function feeds_hook_info() {
+  $hooks = array(
+    'feeds_plugins',
+    'feeds_after_parse',
+    'feeds_before_import',
+    'feeds_before_update',
+    'feeds_presave',
+    'feeds_after_save',
+    'feeds_after_import',
+    'feeds_after_clear',
+    'feeds_processor_targets_alter',
+    'feeds_parser_sources_alter',
+  );
+
+  return array_fill_keys($hooks, array('group' => 'feeds'));
+}
+
+/**
+ * Entity URI callback.
+ *
+ * @param \Drupal\Core\Entity\EntityInterface $feeds_feed
+ *   A feed entity.
+ *
+ * @return array
+ *   An array with 'path' as the key and the path to the node as its value.
+ */
+function feeds_feed_uri(EntityInterface $feed) {
+  return array(
+    'path' => 'feed/' . $feed->id(),
+  );
+}
+
+/**
+ * Implements hook_cron().
+ *
+ * @todo This needs to be different, this could timeout easily. Perhaps a queue.
+ */
+function feeds_cron() {
+  if ($importers = Importer::reschedule()) {
+    $feed_controller = \Drupal::entityManager()->getStorageController('feeds_feed');
+
+    if ($importers === TRUE) {
+      $feeds = $feed_controller->loadMultiple();
+    }
+    else {
+      $feeds = $feed_controller->loadByProperties(array('importer' => $importers));
+    }
+    foreach ($feeds as $feed) {
+      $feed->schedule();
+    }
+    Importer::reschedule(FALSE);
+  }
+
+  // Expire old log entries.
+  db_delete('feeds_log')
+    ->condition('request_time', REQUEST_TIME - 604800, '<')
+    ->execute();
+}
+
+/**
+ * Implements hook_queue_info().
+ */
+function feeds_queue_info() {
+  return array(
+    'feeds_push_unsubscribe' => array(
+      'title' => t('Feeds push unsubscribe'),
+      'worker callback' => 'feeds_push_unsubscribe',
+      'cron' => array(
+        'time' => 60,
+      ),
+    ),
+    'feeds_push_subscribe' => array(
+      'title' => t('Feeds push subscribe'),
+      'worker callback' => 'feeds_push_subscribe',
+      'cron' => array(
+        'time' => 60,
+      ),
+    ),
+    'feeds_feed_import' => array(
+      'title' => t('Feed import'),
+      'worker callback' => 'feeds_feed_import',
+      'cron' => array(
+        'time' => 60,
+      ),
+    ),
+    'feeds_feed_expire' => array(
+      'title' => t('Feed expire'),
+      'worker callback' => 'feeds_feed_expire',
+      'cron' => array(
+        'time' => 60,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_cron_job_scheduler_info().
+ */
+function feeds_cron_job_scheduler_info() {
+  $info = array();
+  $info['feeds_feed_import'] = array(
+    'queue name' => 'feeds_feed_import',
+  );
+  $info['feeds_feed_expire'] = array(
+    'queue name' => 'feeds_feed_expire',
+  );
+  return $info;
+}
+
+/**
+ * Scheduler callback for importing from a source.
+ */
+function feeds_feed_import(array $job) {
+  _feeds_job_scheduler_helper('import', $job);
+}
+
+/**
+ * Scheduler callback for expiring content.
+ */
+function feeds_feed_expire(array $job) {
+  _feeds_job_scheduler_helper('expire', $job);
+}
+
+/**
+ * Executes a job_scheduler job.
+ */
+function _feeds_job_scheduler_helper($action, array $job) {
+  $feed = \Drupal::entityManager()->getStorageController('feeds_feed')->load($job['id']);
+
+  if ($feed) {
+    try {
+      $feed->existing()->$action();
+    }
+    catch (FeedsNotExistingException $e) {
+      // Do nothing.
+    }
+    catch (Exception $e) {
+      $feed->log('import', $e->getMessage(), array(), WATCHDOG_ERROR);
+    }
+    $method = 'schedule' . ucfirst($action);
+    $feed->$method();
+  }
+}
+
+/**
+ * Scheduler callback for unsubscribing from PuSH hubs.
+ *
+ * @todo This isn't working yet.
+ */
+function feeds_push_unsubscribe(array $job) {
+  $feed = \Drupal::entityManager()->getStorageController('feeds_feed')->load($job['id']);
+  $feed->getImporter()->getFetcher()->unsubscribe($feed);
+}
+
+/**
+ * Scheduler callback for subscribing from PuSH hubs.
+ */
+function feeds_push_subscribe(array $job) {
+  if ($feed = entity_load('feeds_feed', $job['id'])) {
+    $feed_config = $feed->getConfiguration();
+
+    if ($subscription = \Drupal::service('feeds.subscription.crud')->getSubscription($feed->id())) {
+
+      if (isset($feed_config['fetcher'])) {
+
+        // @todo Error handling.
+        $client = \Drupal::httpClient();
+        $response = $client->get($feed_config['fetcher']['source'])->send();
+
+        Reader::setExtensionManager(Drupal::service('feed.bridge.reader'));
+        $channel = Reader::importString($response->getBody(TRUE));
+
+        if ($hubs = $channel->getHubs()) {
+          $subscription['hub'] = reset($hubs);
+          $subscription['state'] = 'subscribe';
+          \Drupal::service('feeds.subscription.crud')->setSubscription($subscription);
+
+          $request = $client
+            ->post($subscription['hub'])
+            ->addPostFields(array(
+              'hub.callback' => 'http://98.248.39.71:8080/feed/' . $feed->id() . '/push_callback',
+              'hub.mode' => $subscription['state'],
+              'hub.topic' => $subscription['topic'],
+              'hub.verify_token' => $subscription['token'],
+              'hub.verify' => 'sync',
+              'hub.lease_seconds' => '',
+              'hub.secret' => $subscription['secret'],
+            )
+          );
+
+          try {
+            $response = $request->send();
+          }
+          catch (BadResponseException $e) {
+            $response = $e->getResponse();
+            watchdog('feeds', '%error', array('%error' => $response->getStatusCode() . ' ' . $response->getReasonPhrase()), WATCHDOG_WARNING);
+            drupal_set_message(t('%error', array('%error' => $response->getStatusCode() . ' ' . $response->getReasonPhrase())));
+          }
+          catch (RequestException $e) {
+            watchdog('feeds', '%error', array('%error' => $e->getMessage()), WATCHDOG_WARNING);
+            drupal_set_message(t('%error', array('%error' => $e->getMessage())));
+          }
+
+          if ($response->getStatusCode() != 204 || $response->getStatusCode() != 202) {
+            // There was an error, handle it.
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Batch API worker callback. Used by Feed::startBatchAPIJob().
+ *
+ * @todo Harmonize Job Scheduler API callbacks with Batch API callbacks?
+ *
+ * @param string $method
+ *   Method to execute on the feed.
+ * @param int $fid
+ *   The feed id.
+ * @param array $context
+ *   Batch context.
+ *
+ * @see \Drupal\feeds\Feeds\Manager\Background::startBatchAPIJob()
+ */
+function feeds_batch($method, $fid, array &$context) {
+  $context['finished'] = StateInterface::BATCH_COMPLETE;
+  try {
+    $context['finished'] = entity_load('feeds_feed', $fid)->$method();
+  }
+  catch (Exception $e) {
+    drupal_set_message($e->getMessage(), 'error');
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function feeds_permission() {
+  $perms = array(
+    'administer feeds' => array(
+      'title' => t('Administer Feeds'),
+      'description' => t('Create, update, delete importers, execute import and delete tasks on any importer.'),
+    ),
+  );
+  $importers = feeds_entity_bundle_info();
+
+  if (!$importers) {
+    return $perms;
+  }
+
+  foreach (array_keys($importers['feeds_feed']) as $importer) {
+    $args = array('%name' => $importers['feeds_feed'][$importer]['label']);
+
+    $perms["view $importer feeds"] = array(
+      'title' => t('View %name feeds', $args),
+    );
+    $perms["create $importer feeds"] = array(
+      'title' => t('Add %name feeds', $args),
+    );
+    $perms["update $importer feeds"] = array(
+      'title' => t('Edit %name feeds', $args),
+    );
+    $perms["delete $importer feeds"] = array(
+      'title' => t('Delete %name feeds', $args),
+    );
+    $perms["import $importer feeds"] = array(
+      'title' => t('Import %name feeds', $args),
+    );
+    $perms["clear $importer feeds"] = array(
+      'title' => t('Delete items from %name feeds', $args),
+    );
+    $perms["unlock $importer feeds"] = array(
+      'title' => t('Unlock imports from %name feeds', $args),
+      'description' => t('If a feed importation breaks for some reason, users with this permission can unlock it.'),
+    );
+  }
+
+  return $perms;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function feeds_menu() {
+  $items = array();
+  $items['feed/add'] = array(
+    'title' => 'Add feed',
+    'route_name' => 'feeds.add_page',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_menu_link_defaults().
+ */
+function feeds_menu_link_defaults() {
+  $links = array();
+  $links['feeds.add_page'] = array(
+    'link_title' => 'Add feed',
+    'route_name' => 'feeds.add_page',
+  );
+  $links['feeds.importer_list'] = array(
+    'link_title' => 'Feeds importers',
+    'parent' => 'system.admin.structure',
+    'description' => 'Configure one or more Feeds importers to aggregate RSS and Atom feeds, import CSV files or more.',
+    'route_name' => 'feeds.importer_list',
+  );
+  return $links;
+}
+
+/**
+ * Implements hook_menu_local_tasks().
+ */
+function feeds_menu_local_tasks(&$data, $route_name) {
+  // Add action link to 'feed/add' on 'admin/content' page.
+  if (current_path() == 'admin/content/feed') {
+
+    $item = menu_get_item('feed/add');
+    if ($item['access']) {
+      $data['actions'][] = array(
+        '#theme' => 'menu_local_action',
+        '#link' => $item,
+      );
+    }
+  }
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function feeds_admin_paths() {
+  return array(
+    'feed/*/edit' => TRUE,
+    'feed/*/delete' => TRUE,
+    'feed/*/import' => TRUE,
+    'feed/*/unlock' => TRUE,
+    'feed/*/delete-items' => TRUE,
+    'feed/add' => TRUE,
+    'feed/add/*' => TRUE,
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function feeds_theme() {
+  return array(
+    'feeds_feed_status' => array(
+      'variables' => array(
+        'progress_importing' => NULL,
+        'progress_clearing' => NULL,
+        'imported' => NULL,
+        'count' => NULL,
+      ),
+      'file' => 'feeds.theme.inc',
+    ),
+  );
+}
+
+/**
+ * Implements hook_entity_bundle_info().
+ */
+function feeds_entity_bundle_info() {
+  $bundles = array();
+  foreach (config_get_storage_names_with_prefix('feeds.importer.') as $config_name) {
+    $config = config($config_name);
+    $bundles['feeds_feed'][$config->get('id')]['label'] = $config->get('label');
+  }
+  return $bundles;
+}
+
+/**
+ * Implements hook_file_download().
+ *
+ * @todo This doesn't handle duplicate sources.
+ */
+function feeds_file_download($uri) {
+  $fids = \Drupal::entityQuery('feeds_feed')
+    ->condition('source', $uri)
+    ->range(0, 1)
+    ->execute();
+
+  if (!$fids) {
+    // File is not associated with a feed.
+    return;
+  }
+
+  // Get the file record based on the URI. If not in the database just return.
+  $files = file_load_multiple(array(), array('uri' => $uri));
+  foreach ($files as $item) {
+    // Since some database servers sometimes use a case-insensitive comparison
+    // by default, double check that the filename is an exact match.
+    if ($file->getFileUri() === $uri) {
+      $file = $item;
+      break;
+    }
+  }
+  if (!isset($file)) {
+    return;
+  }
+
+  // Check if this file belongs to Feeds.
+  $usage_list = file_usage()->listUsage($file);
+  if (!isset($usage_list['feeds'])) {
+    return;
+  }
+
+  $fid = reset($fids);
+
+  $feed = \Drupal::entityManager()->getStorageController('feeds_feed')->load($fid);
+  if (!$feed || !$feed->access('import')) {
+    // User does not have permission to import this feed.
+    return -1;
+  }
+
+  // Return file headers.
+  return file_get_content_headers($file);
+}
+
+/**
+ * Implements hook_library_info().
+ */
+function feeds_library_info() {
+  $libraries = array();
+  $libraries['feeds'] = array(
+    'title' => 'Feeds js.',
+    'version' => '1.0',
+    'js' => array(
+      drupal_get_path('module', 'feeds') . '/feeds.js' => array('group' => JS_LIBRARY, 'weight' => 2),
+    ),
+    'dependencies' => array(
+      array('system', 'drupal.ajax'),
+    ),
+  );
+
+  return $libraries;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Remove our field from the Field UI overview form.
+ */
+function feeds_form_field_ui_field_overview_form_alter(array &$form, array &$form_state) {
+  if (in_array('feeds_item', $form['#fields'])) {
+
+    unset($form['#fields'][array_search('feeds_item', $form['#fields'])]);
+    unset($form['fields']['feeds_item']);
+
+    $rows_order = $form['fields']['#regions']['content']['rows_order'];
+    $key = array_search('feeds_item', $rows_order);
+    unset($form['fields']['#regions']['content']['rows_order'][$key]);
+  }
+}

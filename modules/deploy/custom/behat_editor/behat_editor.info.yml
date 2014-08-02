@@ -1,0 +1,5 @@
+name: Behat Editor
+type: module
+description: 'Api and Config for Behat Editor v2'
+package: BehatEditor
+core: 8.x

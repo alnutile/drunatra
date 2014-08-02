@@ -1,0 +1,245 @@
+<?php
+
+/**
+ * @file
+ * Schema definitions install/update/uninstall hooks.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function feeds_uninstall() {
+  variable_del('http_request_timeout');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function feeds_schema() {
+  $schema = array();
+
+  $schema['feeds_feed'] = array(
+    'description' => 'Source definitions for feeds.',
+    'fields' => array(
+      'fid' => array(
+        'description' => 'The primary identifier for a feed.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uuid' => array(
+        'description' => 'Unique Key: Universally unique identifier for this entity.',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => FALSE,
+      ),
+      'importer' => array(
+        'description' => 'The {feeds_importer}.id of this feed.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'title' => array(
+        'description' => 'The title of this feed, always treated as non-markup plain text.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'uid' => array(
+        'description' => 'The {users}.uid that owns this feed; initially, this is the user that created it.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'status' => array(
+        'description' => 'Boolean indicating whether the feed is active.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the feed was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the feed was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'imported' => array(
+        'description' => 'The Unix timestamp when the feed was most recently imported.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'config' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => FALSE,
+        'description' => 'Configuration of the feed.',
+        'serialize' => TRUE,
+      ),
+      'source' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'description' => 'Main source resource identifier. E. g. a path or a URL.',
+      ),
+      'state' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => FALSE,
+        'description' => 'State of import or clearing batches.',
+        'serialize' => TRUE,
+      ),
+      'fetcher_result' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => FALSE,
+        'description' => 'Cache for fetcher result.',
+        'serialize' => TRUE,
+      ),
+    ),
+    'primary key' => array('fid'),
+    'indexes' => array(
+      'id' => array('importer'),
+      'id_source' => array('importer', array('source', 128)),
+    ),
+  );
+  $schema['feeds_subscription'] = array(
+    'description' => 'PubSubHubbub subscriptions.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'The {feeds_feed}.fid this record belongs to.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'topic' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'description' => 'The topic URL (feed URL) of this subscription.',
+      ),
+      'hub' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'description' => 'The URL of the hub endpoint of this subscription.',
+      ),
+      'created' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The UNIX timestamp this subscription was originally created.',
+      ),
+      'lease' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'description' => 'The lease time in seconds.',
+      ),
+      'expires' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'description' => 'The UNIX timestamp this subscription will expire.',
+      ),
+      'token' => array(
+        'type' => 'varchar',
+        'length' => 43,
+        'description' => 'The token used to verify a subscribe request.',
+      ),
+      'secret' => array(
+        'type' => 'varchar',
+        'length' => 43,
+        'not null' => TRUE,
+        'description' => 'The secret used to verify a request.',
+      ),
+      'state' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'description' => 'Status of subscription.',
+      ),
+    ),
+    'primary key' => array('id'),
+    'foreign keys' => array(
+      'id' => array(
+        'table' => 'feeds_feed',
+        'columns' => array('id' => 'fid'),
+      ),
+    ),
+  );
+  $schema['feeds_log'] = array(
+    'description' => 'Table that contains logs of feeds events.',
+    'fields' => array(
+      'flid' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique feeds event ID.',
+      ),
+      'fid' => array(
+        'description' => 'The {feeds_feed}.fid this record belongs to.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'log_time' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Unix timestamp of when event occurred.',
+      ),
+      'request_time' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Unix timestamp of the request when the event occurred.',
+      ),
+      'type' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Type of log message, for example "feeds_import"."',
+      ),
+      'message' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'size' => 'big',
+        'description' => 'Text of log message to be passed into the t() function.',
+      ),
+      'variables' => array(
+        'type' => 'blob',
+        'not null' => TRUE,
+        'size' => 'big',
+        'description' => 'Serialized array of variables that match the message string and that is passed into the t() function.',
+      ),
+      'severity' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'The severity level of the event; ranges from 0 (Emergency) to 7 (Debug)',
+      ),
+    ),
+    'primary key' => array('flid'),
+    'indexes' => array(
+      'request_time' => array('request_time'),
+      'log_time' => array('log_time'),
+      'type' => array('type'),
+    ),
+    'foreign keys' => array(
+      'fid' => array(
+        'table' => 'feeds_feed',
+        'columns' => array('fid' => 'fid'),
+      ),
+    ),
+  );
+
+  return $schema;
+}

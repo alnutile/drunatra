@@ -1,0 +1,139 @@
+object(Symfony\Component\HttpFoundation\Request)[2]
+  public 'attributes' =>
+    object(Symfony\Component\HttpFoundation\ParameterBag)[5]
+      protected 'parameters' =>
+        array (size=10)
+          '_system_path' => string 'api/behat_editor/v2/3/test' (length=26)
+          '_authentication_provider' => string 'cookie' (length=6)
+          '_content' => string '\Drupal\behat_editor\Controller\BehatEditorRunController::run' (length=61)
+          'repo_setting_id' => string '3' (length=1)
+          'filename' => string 'test' (length=4)
+          '_route' => string 'behat_editor.arguments' (length=22)
+          '_route_object' =>
+            object(Symfony\Component\Routing\Route)[170]
+              ...
+          '_raw_variables' =>
+            object(Symfony\Component\HttpFoundation\ParameterBag)[176]
+              ...
+          '_route_params' =>
+            array (size=5)
+              ...
+          '_controller' => string 'controller.page:content' (length=23)
+  public 'request' =>
+    object(Symfony\Component\HttpFoundation\ParameterBag)[3]
+      protected 'parameters' =>
+        array (size=0)
+          empty
+  public 'query' =>
+    object(Symfony\Component\HttpFoundation\ParameterBag)[4]
+      protected 'parameters' =>
+        array (size=0)
+          empty
+  public 'server' =>
+    object(Symfony\Component\HttpFoundation\ServerBag)[8]
+      protected 'parameters' =>
+        array (size=33)
+          'USER' => string 'vagrant' (length=7)
+          'HOME' => string '/home/vagrant' (length=13)
+          'FCGI_ROLE' => string 'RESPONDER' (length=9)
+          'QUERY_STRING' => string '' (length=0)
+          'REQUEST_METHOD' => string 'GET' (length=3)
+          'CONTENT_TYPE' => string '' (length=0)
+          'CONTENT_LENGTH' => string '' (length=0)
+          'SCRIPT_FILENAME' => string '/home/vagrant/Code/d8behat/admin/index.php' (length=42)
+          'SCRIPT_NAME' => string '/index.php' (length=10)
+          'REQUEST_URI' => string '/api/behat_editor/v2/3/test' (length=27)
+          'DOCUMENT_URI' => string '/index.php' (length=10)
+          'DOCUMENT_ROOT' => string '/home/vagrant/Code/d8behat/admin' (length=32)
+          'SERVER_PROTOCOL' => string 'HTTP/1.1' (length=8)
+          'GATEWAY_INTERFACE' => string 'CGI/1.1' (length=7)
+          'SERVER_SOFTWARE' => string 'nginx/1.6.0' (length=11)
+          'REMOTE_ADDR' => string '10.0.2.2' (length=8)
+          'REMOTE_PORT' => string '55909' (length=5)
+          'SERVER_ADDR' => string '10.0.2.15' (length=9)
+          'SERVER_PORT' => string '80' (length=2)
+          'SERVER_NAME' => string 'd8behat.dev' (length=11)
+          'REDIRECT_STATUS' => string '200' (length=3)
+          'HTTP_HOST' => string 'd8behat.dev:8000' (length=16)
+          'HTTP_CONNECTION' => string 'keep-alive' (length=10)
+          'HTTP_CACHE_CONTROL' => string 'no-cache' (length=8)
+          'HTTP_PRAGMA' => string 'no-cache' (length=8)
+          'HTTP_ACCEPT' => string 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8' (length=74)
+          'HTTP_USER_AGENT' => string 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36' (length=120)
+          'HTTP_ACCEPT_ENCODING' => string 'gzip,deflate,sdch' (length=17)
+          'HTTP_ACCEPT_LANGUAGE' => string 'en-US,en;q=0.8' (length=14)
+          'HTTP_COOKIE' => string 'SESS61dcbcf6c1ce4a97c77c8050d0af6d61=J-K7ahdkmZFOotExAsYI7QYURcJ6id6DRXW91NQX41Q' (length=80)
+          'PHP_SELF' => string '/index.php' (length=10)
+          'REQUEST_TIME_FLOAT' => float 1405948619.6162
+          'REQUEST_TIME' => int 1405948619
+  public 'files' =>
+    object(Symfony\Component\HttpFoundation\FileBag)[7]
+      protected 'parameters' =>
+        array (size=0)
+          empty
+  public 'cookies' =>
+    object(Symfony\Component\HttpFoundation\ParameterBag)[6]
+      protected 'parameters' =>
+        array (size=1)
+          'SESS61dcbcf6c1ce4a97c77c8050d0af6d61' => string 'J-K7ahdkmZFOotExAsYI7QYURcJ6id6DRXW91NQX41Q' (length=43)
+  public 'headers' =>
+    object(Symfony\Component\HttpFoundation\HeaderBag)[9]
+      protected 'headers' =>
+        array (size=11)
+          'content-type' =>
+            array (size=1)
+              ...
+          'content-length' =>
+            array (size=1)
+              ...
+          'host' =>
+            array (size=1)
+              ...
+          'connection' =>
+            array (size=1)
+              ...
+          'cache-control' =>
+            array (size=1)
+              ...
+          'pragma' =>
+            array (size=1)
+              ...
+          'accept' =>
+            array (size=1)
+              ...
+          'user-agent' =>
+            array (size=1)
+              ...
+          'accept-encoding' =>
+            array (size=1)
+              ...
+          'accept-language' =>
+            array (size=1)
+              ...
+          'cookie' =>
+            array (size=1)
+              ...
+      protected 'cacheControl' =>
+        array (size=1)
+          'no-cache' => boolean true
+  protected 'content' => null
+  protected 'languages' => null
+  protected 'charsets' => null
+  protected 'encodings' => null
+  protected 'acceptableContentTypes' =>
+    array (size=5)
+      0 => string 'text/html' (length=9)
+      1 => string 'application/xhtml+xml' (length=21)
+      2 => string 'image/webp' (length=10)
+      3 => string 'application/xml' (length=15)
+      4 => string '*/*' (length=3)
+  protected 'pathInfo' => string '/api/behat_editor/v2/3/test' (length=27)
+  protected 'requestUri' => string '/api/behat_editor/v2/3/test' (length=27)
+  protected 'baseUrl' => string '' (length=0)
+  protected 'basePath' => string '' (length=0)
+  protected 'method' => string 'GET' (length=3)
+  protected 'format' => string 'html' (length=4)
+  protected 'session' => null
+  protected 'locale' => null
+  protected 'defaultLocale' => string 'en' (length=2)
+["3","test"]
